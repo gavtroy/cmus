@@ -30,8 +30,12 @@ struct tree_track {
 
 	/* position in track search tree */
 	struct rb_node tree_node;
+	struct list_head lib_all_tracks_node;
+	struct list_head all_tracks_node; // within album
 
 	struct album *album;
+
+	bool in_tree;
 };
 
 static inline struct track_info *tree_track_info(const struct tree_track *track)
@@ -50,9 +54,11 @@ struct album {
 
 	/* position in album search tree */
 	struct rb_node tree_node;
+	struct list_head all_albums_node;
 
 	/* root of track tree */
 	struct rb_root track_root;
+	struct list_head all_tracks;
 
 	struct artist *artist;
 	char *name;
@@ -64,14 +70,18 @@ struct album {
 	/* min date of the tracks added to this album */
 	int min_date;
 	int num_tracks;
+
+	bool in_tree;
 };
 
 struct artist {
 	/* position in artist search tree */
 	struct rb_node tree_node;
+	struct rb_node all_artists_node;
 
 	/* root of album tree */
 	struct rb_root album_root;
+	struct list_head all_albums;
 
 	char *name;
 	char *sort_name;
@@ -83,6 +93,7 @@ struct artist {
 	/* albums visible for this artist in the tree_win? */
 	unsigned int expanded : 1;
 	unsigned int is_compilation : 1;
+	unsigned int in_tree : 1;
 };
 
 const char *artist_sort_name(const struct artist *);
@@ -97,6 +108,7 @@ extern struct editable lib_editable;
 extern struct tree_track *lib_cur_track;
 extern struct rb_root lib_shuffle_root;
 extern struct rb_root lib_album_shuffle_root;
+extern struct list_head lib_all_tracks;
 extern enum aaa_mode aaa_mode;
 extern unsigned int play_sorted;
 extern char *lib_live_filter;
@@ -106,12 +118,16 @@ extern struct window *lib_tree_win;
 extern struct window *lib_track_win;
 extern struct window *lib_cur_win;
 extern struct rb_root lib_artist_root;
+extern struct rb_root lib_all_artists_root;
+
+extern int lib_filter_action;
 
 #define CUR_ALBUM	(lib_cur_track->album)
 #define CUR_ARTIST	(lib_cur_track->album->artist)
 
 void lib_init(void);
 void tree_init(void);
+int lib_is_filtered(struct track_info *ti);
 struct track_info *lib_goto_next(void);
 struct track_info *lib_goto_prev(void);
 struct track_info *lib_goto_next_album(void);
@@ -139,9 +155,10 @@ struct tree_track *tree_get_selected(void);
 struct track_info *tree_activate_selected(void);
 const char *tree_artist_name(const struct track_info* ti);
 const char *tree_album_name(const struct track_info* ti);
-void tree_sort_artists(void (*add_album_cb)(struct album *), void (*remove_album_cb)(struct album *));
-void tree_add_track(struct tree_track *track, void (*add_album_cb)(struct album *));
-void tree_remove(struct tree_track *track, void (*remove_album_cb)(struct album *));
+void tree_sort_artists(void);
+void tree_add_track(struct tree_track *track);
+void tree_readd_track(struct tree_track *track);
+void tree_remove(struct tree_track *track);
 void tree_remove_sel(void);
 void tree_toggle_active_window(void);
 void tree_toggle_expand_artist(void);
@@ -180,6 +197,11 @@ static inline struct tree_track *iter_to_tree_track(const struct iter *iter)
 static inline struct artist *to_artist(const struct rb_node *node)
 {
 	return container_of(node, struct artist, tree_node);
+}
+
+static inline struct artist *all_artists_node_to_artist(const struct rb_node *node)
+{
+	return container_of(node, struct artist, all_artists_node);
 }
 
 static inline struct album *to_album(const struct rb_node *node)
