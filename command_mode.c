@@ -1600,7 +1600,7 @@ static void cmd_win_activate(char *arg)
 			shuffle_root = &lib_shuffle_root;
 		} else if (shuffle == SHUFFLE_ALBUMS) {
 			if (lib_cur_track)
-				previous = &lib_cur_track->album->shuffle_info;
+				previous = &CUR_ALBUM->shuffle_info;
 			shuffle_root = &lib_album_shuffle_root;
 		}
 	}
@@ -1611,14 +1611,14 @@ static void cmd_win_activate(char *arg)
 		if (shuffle == SHUFFLE_TRACKS)
 			next = &lib_cur_track->simple_track.shuffle_info;
 		else if (shuffle == SHUFFLE_ALBUMS)
-			next = &lib_cur_track->album->shuffle_info;
+			next = &CUR_ALBUM->shuffle_info;
 		break;
 	case SORTED_VIEW:
 		info = sorted_activate_selected();
 		if (shuffle == SHUFFLE_TRACKS)
 			next = &lib_cur_track->simple_track.shuffle_info;
 		else if (shuffle == SHUFFLE_ALBUMS)
-			next = &lib_cur_track->album->shuffle_info;
+			next = &CUR_ALBUM->shuffle_info;
 		break;
 	case PLAYLIST_VIEW:
 		info = pl_play_selected_row();

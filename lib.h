@@ -30,20 +30,7 @@ struct tree_track {
 
 	/* position in track search tree */
 	struct rb_node tree_node;
-
-	struct album *album;
 };
-
-static inline struct track_info *tree_track_info(const struct tree_track *track)
-{
-	return ((struct simple_track *)track)->info;
-}
-
-static inline struct tree_track *to_tree_track(const struct rb_node *node)
-{
-	return container_of(node, struct tree_track, tree_node);
-}
-
 
 struct album {
 	struct shuffle_info shuffle_info;
@@ -85,6 +72,25 @@ struct artist {
 	unsigned int is_compilation : 1;
 };
 
+static inline struct track_info *tree_track_info(const struct tree_track *track)
+{
+	return track->simple_track.info;
+}
+
+static inline struct album *tree_track_album(const struct tree_track *track)
+{
+	return track->simple_track.info->lib_album;
+}
+
+static inline struct artist *tree_track_artist(const struct tree_track *track)
+{
+	return track->simple_track.info->lib_album->artist;
+}
+
+static inline struct tree_track *to_tree_track(const struct rb_node *node)
+{
+	return container_of(node, struct tree_track, tree_node);
+}
 const char *artist_sort_name(const struct artist *);
 
 enum aaa_mode {
@@ -107,8 +113,8 @@ extern struct window *lib_track_win;
 extern struct window *lib_cur_win;
 extern struct rb_root lib_artist_root;
 
-#define CUR_ALBUM	(lib_cur_track->album)
-#define CUR_ARTIST	(lib_cur_track->album->artist)
+#define CUR_ALBUM	(tree_track_album(lib_cur_track))
+#define CUR_ARTIST	(tree_track_artist(lib_cur_track))
 
 void lib_init(void);
 void tree_init(void);

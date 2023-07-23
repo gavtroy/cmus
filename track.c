@@ -166,7 +166,7 @@ again:
 	while (item != head) {
 		struct simple_track *track = to_simple_track(item);
 
-		if (filter_callback == NULL || filter_callback(((struct tree_track *)track)->album))
+		if (filter_callback == NULL || filter_callback(track->info->lib_album))
 			return track;
 		item = item->next;
 	}
@@ -192,7 +192,7 @@ again:
 	while (item != head) {
 		struct simple_track *track = to_simple_track(item);
 
-		if (filter_callback == NULL || filter_callback(((struct tree_track *)track)->album))
+		if (filter_callback == NULL || filter_callback(track->info->lib_album))
 			return track;
 		item = item->prev;
 	}
