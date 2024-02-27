@@ -369,6 +369,11 @@ static struct format_option track_fopts[NR_TFS + 1] = {
 	DEF_FO_END
 };
 
+static struct format_option header_fopts[2] = {
+	DEF_FO_TIME('\0', "total_time", 0),
+	DEF_FO_END
+};
+
 int get_track_win_x(void)
 {
 	return track_win_x;
@@ -583,6 +588,19 @@ static int get_album_length(struct album *album)
 
 	rb_for_each_entry(track, tmp, &album->track_root, tree_node) {
 		duration += tree_track_info(track)->duration;
+	}
+
+	return duration;
+}
+
+static int get_artist_length(struct artist *artist)
+{
+	struct album *album;
+	struct rb_node *tmp;
+	int duration = 0;
+
+	rb_for_each_entry(album, tmp, &artist->album_root, tree_node) {
+		duration += get_album_length(album);
 	}
 
 	return duration;
@@ -954,9 +972,18 @@ static void update_track_window(void)
 	static GBUF(title);
 	gbuf_clear(&title);
 
-	/* it doesn't matter what format options we use because the format
-	 * string does not contain any format charaters */
-	format_print(&title, track_win_w - 2, "Track%= Library", track_fopts);
+	struct iter iter;
+	struct album *album;
+	struct artist *artist;
+
+	fopt_set_time(&header_fopts[0], 0, 0);
+	if (window_get_sel(lib_tree_win, &iter)) {
+		if ((album = iter_to_album(&iter)))
+			fopt_set_time(&header_fopts[0], get_album_length(album), 0);
+		else if ((artist = iter_to_artist(&iter)))
+			fopt_set_time(&header_fopts[0], get_artist_length(artist), 0);
+	}
+	format_print(&title, track_win_w - 2, "Track%= %{total_time}", header_fopts);
 	update_window(lib_track_win, track_win_x, 0, track_win_w, title.buffer,
 			print_track);
 }
@@ -1067,6 +1094,9 @@ static void update_editable_window(struct editable *e, const char *title, const 
 	} else {
 		gbuf_addf(&buf, "%s - %d tracks", title, e->nr_tracks);
 	}
+
+	fopt_set_time(&header_fopts[0], e->total_time, 0);
+	format_print(&buf, 0, " (%{total_time})", header_fopts);
 
 	if (e->nr_marked) {
 		gbuf_addf(&buf, " (%d marked)", e->nr_marked);
