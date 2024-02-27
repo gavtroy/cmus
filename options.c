@@ -248,13 +248,13 @@ static const struct {
 	[FMT_CURRENT]		= { "format_current"		, " %a - %l%! - %n. %t%= %y "				},
 	[FMT_STATUSLINE]	= { "format_statusline"		,
 		" %{status} %{?show_playback_position?%{position} %{?duration?/ %{duration} }?%{?duration?%{duration} }}"
-		"- %{total} %{?bpm>0?at %{bpm} BPM }"
-		"%{?volume>=0?vol: %{?lvolume!=rvolume?%{lvolume},%{rvolume} ?%{volume} }}"
+		"%{?bpm>0?at %{bpm} BPM }"
 		"%{?stream?buf: %{buffer} }"
 		"%{?show_current_bitrate & bitrate>=0? %{bitrate} kbps }"
-		"%="
-		"%{?repeat_current?repeat current?%{?play_library?%{playlist_mode} from %{?play_sorted?sorted }library?playlist}}"
-		" | %1{continue}%1{follow}%1{repeat}%1{shuffle} "
+		"%= "
+		"%{?repeat_current?repeat current?%{?play_library?%{?playlist_mode!=\"all\"?%{playlist_mode} from }%{?play_sorted?sorted }library?playlist}} | "
+		"%{?volume>=0?vol: %{?lvolume!=rvolume?%{lvolume},%{rvolume}?%{volume}}%% | }"
+		"%1{continue}%1{follow}%1{repeat}%1{shuffle} "
 	},
 	[FMT_PLAYLIST_ALT]	= { "altformat_playlist"	, " %f%= %d "						},
 	[FMT_PLAYLIST]		= { "format_playlist"		, " %-21%a %3n. %t%= %y %d %{?X!=0?%3X ?    }"		},
