@@ -100,6 +100,31 @@ check_wcwidth()
 	return 0
 }
 
+strverscmp_code="
+#define _GNU_SOURCE
+#include <string.h>
+
+int main(int argc, char *argv[])
+{
+	(void) strverscmp(\"a\", \"b\");
+	return 0;
+}
+"
+
+check_strverscmp()
+{
+	msg_checking "for strverscmp"
+	if try_compile "$strverscmp_code"
+	then
+		msg_result yes
+		HAVE_STRVERSCMP=1
+	else
+		msg_result no
+		HAVE_STRVERSCMP=0
+	fi
+	return 0
+}
+
 check_compat()
 {
 	COMPAT_LIBS=
@@ -638,6 +663,7 @@ check check_rtsched
 check check_ncurses
 check check_iconv
 check check_wcwidth
+check check_strverscmp
 check_header byteswap.h && HAVE_BYTESWAP_H=y
 check_string_function "strdup" && HAVE_STRDUP=y
 check_string_function "strndup" && HAVE_STRNDUP=y
@@ -706,6 +732,7 @@ config_header config/iconv.h HAVE_ICONV
 config_header config/wcwidth.h HAVE_WCWIDTH
 config_header config/samplerate.h HAVE_SAMPLERATE
 config_header config/xmalloc.h HAVE_STRDUP HAVE_STRNDUP
+config_header config/strverscmp.h HAVE_STRVERSCMP
 
 CFLAGS="${CFLAGS} -DHAVE_CONFIG"
 
