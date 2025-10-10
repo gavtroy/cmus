@@ -149,35 +149,35 @@ get_ops_by_extension(const char *ext, struct list_head **headp)
 	return rv;
 }
 
-static const struct input_plugin_ops *
-get_ops_by_mime_type_locked(const char *mime_type)
+static int get_ops_by_mime_type_locked(const struct input_plugin_ops **matched_plugins, size_t max_results, const char *mime_type)
 {
 	struct ip *ip;
+	int n = 0;
 
 	list_for_each_entry(ip, &ip_head, node) {
 		const char * const *types = ip->mime_types;
 		int i;
 
-		if (ip->priority <= 0) {
+		if (ip->priority <= 0)
 			break;
-		}
 
 		for (i = 0; types[i]; i++) {
-			if (strcasecmp(mime_type, types[i]) == 0)
-				return ip->ops;
+			if (strcasecmp(mime_type, types[i]) == 0) {
+				matched_plugins[n++] = ip->ops;
+				if (n == max_results)
+					return n;
+			}
 		}
 	}
-	return NULL;
+	return n;
 }
 
-static const struct input_plugin_ops *
-get_ops_by_mime_type(const char *mime_type)
+static int get_ops_by_mime_type(const struct input_plugin_ops **matched_plugins, size_t max_results, const char *mime_type)
 {
 	ip_rdlock();
-	const struct input_plugin_ops *rv =
-		get_ops_by_mime_type_locked(mime_type);
+	int n = get_ops_by_mime_type_locked(matched_plugins, max_results, mime_type);
 	ip_unlock();
-	return rv;
+	return n;
 }
 
 static void keyvals_add_basic_auth(struct growing_keyvals *c,
@@ -294,34 +294,10 @@ static struct connection* get_connection(struct input_plugin *ip)
 	return &ip->data.conn;
 }
 
-static int setup_remote(struct input_plugin *ip, const struct keyval *headers)
+static void setup_remote(struct input_plugin *ip, const struct keyval *headers)
 {
 	const char *val;
-	struct connection *conn = get_connection(ip);
 
-	val = keyvals_get_val(headers, "Content-Type");
-	if (val) {
-		d_print("Content-Type: %s\n", val);
-		ip->ops = get_ops_by_mime_type(val);
-		if (ip->ops == NULL) {
-			d_print("unsupported content type: %s\n", val);
-			error_msg("unsupported content type: %s\n", val);
-			connection_close(conn);
-			return -IP_ERROR_FILE_FORMAT;
-		}
-	} else {
-		const char *type = "audio/mpeg";
-
-		d_print("assuming %s content type\n", type);
-		ip->ops = get_ops_by_mime_type(type);
-		if (ip->ops == NULL) {
-			d_print("unsupported content type: %s\n", type);
-			connection_close(conn);
-			return -IP_ERROR_FILE_FORMAT;
-		}
-	}
-
-	ip->data.fd = get_sockfd(conn);
 	ip->data.metadata = xnew(char, 16 * 255 + 1);
 
 	val = keyvals_get_val(headers, "icy-metaint");
@@ -349,9 +325,10 @@ static int setup_remote(struct input_plugin *ip, const struct keyval *headers)
 	val = keyvals_get_val(headers, "icy-br");
 	if (val)
 		ip->data.icy_br = to_utf8(val, icecast_default_charset);
-
-	return 0;
 }
+
+static void ip_reset(struct input_plugin *ip, int close_fd);
+static int open_remote(struct input_plugin *ip, bool block_pl);
 
 struct read_playlist_data {
 	struct input_plugin *ip;
@@ -362,24 +339,16 @@ struct read_playlist_data {
 static int handle_line(void *data, const char *uri)
 {
 	struct read_playlist_data *rpd = data;
-	struct http_get hg;
 
 	rpd->count++;
-	struct connection *conn = get_connection(rpd->ip);
-	rpd->rc = do_http_get(conn, &hg, uri, 0);
-	if (rpd->rc) {
-		rpd->ip->http_code = hg.code;
-		rpd->ip->http_reason = hg.reason;
-		if (hg.fd >= 0)
-			connection_close(conn);
 
-		hg.reason = NULL;
-		http_get_free(&hg);
+	free(rpd->ip->data.filename);
+	rpd->ip->data.filename = xstrdup(uri);
+	rpd->rc = open_remote(rpd->ip, 1);
+	if (rpd->rc) {
+		ip_reset(rpd->ip, 1);
 		return 0;
 	}
-
-	rpd->rc = setup_remote(rpd->ip, hg.headers);
-	http_get_free(&hg);
 	return 1;
 }
 
@@ -411,8 +380,9 @@ static int read_playlist(struct input_plugin *ip)
 	return rpd.rc;
 }
 
-static int open_remote(struct input_plugin *ip)
+static int open_remote(struct input_plugin *ip, bool block_pl)
 {
+	const struct input_plugin_ops *matched_plugins[5];
 	struct input_plugin_data *d = &ip->data;
 	struct http_get hg;
 	const char *val;
@@ -429,21 +399,53 @@ static int open_remote(struct input_plugin *ip)
 	}
 
 	val = keyvals_get_val(hg.headers, "Content-Type");
-	if (val) {
-		int i;
+	if (val)
+		d_print("Content-Type: %s\n", val);
+	else {
+		val = "audio/mpeg";
+		d_print("assuming %s content type\n", val);
+	}
 
-		for (i = 0; i < N_ELEMENTS(pl_mime_types); i++) {
+	if (!block_pl) {
+		for (int i = 0; i < N_ELEMENTS(pl_mime_types); i++) {
 			if (!strcasecmp(val, pl_mime_types[i])) {
-				d_print("Content-Type: %s\n", val);
 				http_get_free(&hg);
 				return read_playlist(ip);
 			}
 		}
 	}
 
-	ip->data.fd = get_sockfd(&d->conn);
-	rc = setup_remote(ip, hg.headers);
-	http_get_free(&hg);
+	int num_matched_plugins = get_ops_by_mime_type(matched_plugins, N_ELEMENTS(matched_plugins), val);
+	if (num_matched_plugins == 0) {
+		d_print("unsupported content type: %s\n", val);
+		connection_close(conn);
+		http_get_free(&hg);
+		return -IP_ERROR_FILE_FORMAT;
+	}
+
+	for (int plugin = 0; plugin < num_matched_plugins; plugin++) {
+		if (plugin != 0) {
+			d_print("fallback: try next plugin for `%s'\n", ip->data.filename);
+			ip_reset(ip, 1);
+
+			rc = do_http_get(conn, &hg, d->filename, 0);
+			if (rc) {
+				ip->http_code = hg.code;
+				ip->http_reason = hg.reason;
+				hg.reason = NULL;
+				http_get_free(&hg);
+				return rc;
+			}
+		}
+
+		ip->ops = matched_plugins[plugin];
+		setup_remote(ip, hg.headers);
+
+		rc = ip->ops->open(&ip->data);
+		http_get_free(&hg);
+		if (rc == 0)
+			break;
+	}
 	return rc;
 }
 
@@ -633,16 +635,16 @@ int ip_open(struct input_plugin *ip)
 
 	/* set fd and ops, call ops->open */
 	if (ip->data.remote) {
-		rc = open_remote(ip);
-		if (rc == 0)
-			rc = ip->ops->open(&ip->data);
+		rc = open_remote(ip, 0);
 	} else {
 		if (is_cdda_url(ip->data.filename)) {
-			ip->ops = get_ops_by_mime_type("x-content/audio-cdda");
-			rc = ip->ops ? ip->ops->open(&ip->data) : 1;
+			rc = 1;
+			if (get_ops_by_mime_type(&ip->ops, 1, "x-content/audio-cdda"))
+				rc = ip->ops->open(&ip->data);
 		} else if (is_cue_url(ip->data.filename)) {
-			ip->ops = get_ops_by_mime_type("application/x-cue");
-			rc = ip->ops ? ip->ops->open(&ip->data) : 1;
+			rc = 1;
+			if (get_ops_by_mime_type(&ip->ops, 1, "application/x-cue"))
+				rc = ip->ops->open(&ip->data);
 		} else
 			rc = open_file(ip);
 	}
