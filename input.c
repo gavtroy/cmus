@@ -111,7 +111,8 @@ static int http_read_timeout = 5e3;
 static const char *pl_mime_types[] = {
 	"audio/m3u",
 	"audio/x-scpls",
-	"audio/x-mpegurl"
+	"audio/x-mpegurl",
+	"application/mpegurl"
 };
 
 static const struct input_plugin_ops *
